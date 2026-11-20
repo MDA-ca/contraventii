@@ -1,5 +1,5 @@
 /* Service worker – păstrează aplicația pentru lucru fără internet. Versiunea se schimbă automat la fiecare actualizare. */
-const V='ae994b38b9';
+const V='66a89ed8e4';
 const CACHE='contraventii-'+V;
 const SHELL=['./','index.html','manifest.webmanifest','icon-192.png','icon-512.png','icon-maskable-512.png','apple-touch-icon.png','favicon.png'];
 self.addEventListener('install',e=>{
