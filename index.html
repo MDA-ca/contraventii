@@ -295,9 +295,11 @@ function sanctionView(it){
   }
   out.docs = {MAI:[], DCA:[]};
   if(it.fiz){
-    const lo=it.fiz[0]*DATA.meta.uc, hi=it.fiz[1]*DATA.meta.uc;
-    out.docs.MAI = ['MAI: amendă '+fmtLei(lo)+(hi!==lo?'–'+fmtLei(hi):'')+' lei', 'Achitată în 3 zile lucrătoare: '+fmtLei(lo/2)+(hi!==lo?'–'+fmtLei(hi/2):'')+' lei (jumătate)'];
-    out.docs.DCA = ['DCA: amendă '+fmtLei(lo/2)+' lei (jumătate din minim)', 'Achitată în 3 zile lucrătoare: '+fmtLei(lo/4)+' lei'];
+    const U=DATA.meta.uc, ul=it.fiz[0], uh=it.fiz[1];
+    const fu = n => Number.isInteger(n) ? String(n) : n.toLocaleString('ro-RO',{maximumFractionDigits:2});
+    const rng = (a,b,k) => fu(a*k)+(b!==a?'–'+fu(b*k):'')+' u.c. = '+fmtLei(a*k*U)+(b!==a?'–'+fmtLei(b*k*U):'')+' lei';
+    out.docs.MAI = ['MAI: amendă '+rng(ul,uh,1), 'Achitată în 3 zile lucrătoare: '+rng(ul,uh,0.5)+' (jumătate)'];
+    out.docs.DCA = ['DCA: amendă '+rng(ul,ul,0.5)+' (jumătate din minim)', 'Achitată în 3 zile lucrătoare: '+rng(ul,ul,0.25)];
   }
   if(it.pct) out.pct = it.pct+' puncte de penalizare';
   if(it.avert) out.notes.push('Codul prevede avertisment ca sancțiune alternativă. Art. 33 alin. (3): agentul constatator aplică obligatoriu avertismentul în cazurile prevăzute de Cod dacă, cumulativ: (a) în ultimul an persoana nu a mai fost sancționată pentru aceeași contravenție; (b) a executat sancțiunile contravenționale anterioare.');
@@ -811,7 +813,7 @@ function addResult(query, ranked, weak, doc){
     if(sc.veh||sc.rcr) g2.append(field('rcr','Alt punct RCR (opțional, înlocuiește propunerea)','ex.: 63',null,{wide:true}));
     g2.append(field('probe','Probe (opțional)','ex.: martori, înregistrare video, aparat radar',null,{wide:true}));
     g2.append(field('detalii','Circumstanțe suplimentare (opțional)','ex.: a fost avertizat verbal, a refuzat să semneze',null,{area:true,wide:true}));
-    card.append(g, h('details',{class:'more'},h('summary',{text:'+ Mai multe date'}),g2));
+    card.append(g, h('details',{class:'more'},h('summary',{text:'Mai multe date'}),g2));
     /* fabula */
     ta=h('textarea',{class:'fabula',rows:9}); ta.addEventListener('input',()=>{ st.dirty=true; regenBtn.style.display='inline-block'; });
     regenBtn=h('button',{class:'btn ghost',type:'button',text:'Regenerează din câmpuri',onclick:()=>{ st.dirty=false; refresh(); }});
