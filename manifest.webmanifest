@@ -1,0 +1,36 @@
+{
+ "name": "Asistent contravenții",
+ "short_name": "Contravenții",
+ "description": "Articol, sancțiune și fabulă pentru procesul-verbal (Codul contravențional al R. Moldova)",
+ "lang": "ro",
+ "id": "./",
+ "start_url": "./",
+ "scope": "./",
+ "display": "standalone",
+ "background_color": "#0a1f44",
+ "theme_color": "#0a1f44",
+ "categories": [
+  "utilities",
+  "productivity"
+ ],
+ "icons": [
+  {
+   "src": "icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "icon-maskable-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ]
+}
