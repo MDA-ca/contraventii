@@ -820,7 +820,7 @@ function paintInst(box){
 function installBox(){ const b=h('div',{class:'inst'}); b.hidden=true; INST.add(b); setTimeout(()=>paintInst(b),0); return b; }
 window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); _ip=e; INST.forEach(paintInst); });
 window.addEventListener('appinstalled',()=>{ _ip=null; INST.forEach(paintInst); showToast('Aplicația a fost instalată'); });
-if(window.PWA&&'serviceWorker' in navigator){
+if(window.PWA&&'serviceWorker' in navigator&&!/AsistentAPK/.test(navigator.userAgent)){
   const had=!!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange',()=>{ showToast(had?'Versiune nouă instalată · redeschide aplicația':'Gata: funcționează și fără internet',4500); });
   navigator.serviceWorker.register('sw.js').catch(()=>{});
