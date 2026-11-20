@@ -82,7 +82,30 @@ header .sub{font-size:12px;opacity:.78;margin-top:2px;white-space:nowrap;overflo
 .chip.money{background:var(--ok-bg);color:var(--ok)}.chip.pts{background:var(--bad-bg);color:var(--bad)}
 .chips.docchips{margin-top:9px}.chip.doc{background:var(--doc-bg);color:var(--doc)}.chip.doc.sub{background:var(--surface);color:var(--mut);font-weight:500;border:1px solid var(--line)}
 .note{background:var(--warn);border:1px solid var(--warnb);border-radius:12px;padding:8px 11px;font-size:13.5px;margin:7px 0}
-.docsw{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin:4px 0 12px}
+/* card compact: antet cu comutator MAI/DCA, verdict, restul sub „Detalii” */
+.chead{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.docsw{display:inline-flex;flex:none;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--surface2)}
+.docsw .chipbtn{border:0;border-radius:0;min-height:34px;padding:5px 15px;font-weight:700;font-size:13.5px;background:transparent}
+.docsw .chipbtn.on{background:var(--pri);color:#fff}
+.verdict{margin:8px 0 10px}
+.verdict .artline{font-size:18px;line-height:1.25}
+.vcc{font-size:13px;font-weight:400;color:var(--mut)}
+.vsub{font-size:13px;color:var(--mut);margin-top:6px}.vrcr{font-size:13.5px;margin-top:9px}
+.vsub .linkbtn,.vrcr .linkbtn{min-height:0;padding:0 2px;font-size:13px}
+.chip.wchip{background:var(--warn);color:#7a5200;border:1px solid var(--warnb);font-weight:600}
+.chip.cmchip{border:1px solid var(--warnb);background:var(--warn);color:#7a5200;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer}
+.chip.cmchip.bad{background:var(--bad-bg);color:var(--bad);border-color:var(--bad)}
+@media (prefers-color-scheme:dark){.chip.wchip,.chip.cmchip{color:#ffd77a}.chip.cmchip.bad{color:var(--bad)}}
+.notes{margin:0 0 6px}.notes .obs{display:inline-block;font-size:13.5px;padding:2px 0}
+.card>.grid{margin:4px 0 6px}
+details.more,details.dtl{margin:8px 0;border:1px solid var(--line);border-radius:14px;background:var(--surface2);padding:0 12px 6px}
+details.more>summary,details.dtl>summary{padding:10px 0;font-size:14.5px;color:var(--pri)}
+details.more[open]>.grid{margin:0 0 6px}
+details.dtl .legal{background:var(--surface)}
+details.dtl details.term{background:var(--surface);margin:10px 0}
+details.dtl .rcr{background:var(--surface)}
+.dsec{margin-top:12px}
+.dbox{margin-top:4px}
 .refs{margin:8px 0}
 .refopt{display:flex;gap:9px;align-items:flex-start;padding:9px 10px;border:1px solid var(--line);border-radius:12px;margin:6px 0;font-size:13.5px;cursor:pointer;background:var(--surface)}
 .refopt input{margin-top:3px;min-width:18px;min-height:18px;accent-color:var(--pri)}
@@ -577,10 +600,22 @@ function genericScenario(it){
     refs:[it.id], act:'{fapta}', fields:[{id:'fapta',label:'Fapta (cum a fost săvârșită)',ph:'descrie fapta pe scurt',d:''}],
     veh: it.ch==='XIII' && it.art.indexOf('245')!==0, notes:[], special:null};
 }
+let lastDoc='MAI';
+const CM_TXT={Pc:'Competență limitată',C:'Constați, nu examinezi',X:'Nu e în competența poliției',U:'Competență de verificat'};
+function trunc(s,n){ s=s||''; return s.length>n ? s.slice(0,n).replace(/\s\S*$/,'')+'…' : s; }
 function addResult(query, ranked, weak, doc){
-  const st={query:query, ranked:ranked, idx:0, refId:null, manualRef:false, dirty:false, doc:doc||'MAI', vals:nowVals()};
+  const st={query:query, ranked:ranked, idx:0, refId:null, manualRef:false, dirty:false, doc:doc||lastDoc, vals:nowVals()};
   const card=h('div',{class:'card'}); addBot(card);
-  let sc, artBox, ta, regenBtn, noteBox, termBox, rcrBox, rcrSel, rcrPicBox, rcrPtBox;
+  /* încadrare nesigură (scor mic sau două variante apropiate): variantele rămân la vedere; altfel stau în „Detalii” */
+  const unsure = !!weak || ranked[0].sc<3.5 || (ranked.length>1 && ranked[1].sc>=0.5*ranked[0].sc);
+  let sc, artBox, ta, regenBtn, noteBox, obsBox, detEl, detBox, refsBox, termBox, rcrBox, rcrSel, rcrPicBox, rcrPtBox, refCut=0;
+  function openDet(el){ detEl.open=true; if(el) setTimeout(()=>el.scrollIntoView({block:'start',behavior:'smooth'}),40); }
+  function refBody(it){
+    if(refCut) return '… '+it.disp.slice(refCut).trim();
+    const t=it.title||''; /* nu repeta titlul articolului: arată doar ce deosebește alineatul */
+    if(t && it.disp.toLowerCase().indexOf(t.toLowerCase())===0 && it.disp.length>t.length+3) return '… '+it.disp.slice(t.length).replace(/^[\s,;:–-]+/,'');
+    return it.disp;
+  }
   function pickScenario(i){
     st.idx=i; sc=ranked[i].s; st.manualRef=false; st.dirty=false; st.rcrManual=false; st.rcrKey=null; st.vals._rcr=null;
     st.refId=sc.refs[0]; st.signNote=null;
@@ -590,7 +625,7 @@ function addResult(query, ranked, weak, doc){
     if(sc.special==='speed'){
       const nums=(query.match(/\d+(?:[.,]\d+)?/g)||[]).map(x=>parseFloat(x.replace(',','.'))).filter(n=>n>=10&&n<=300);
       if(nums.length>=2){ if(!st.vals.viteza) st.vals.viteza=String(Math.max.apply(null,nums)); if(!st.vals.limita) st.vals.limita=String(Math.min.apply(null,nums)); }
-      else if(nums.length===1 && !st.vals.viteza) st.vals.viteza=String(nums[0]);
+      else if(nums.length===1 && !st.vals.viteza && !/(^|\s)(cu|на)\s+\d/i.test(query)) st.vals.viteza=String(nums[0]);
     }
     render();
   }
@@ -639,20 +674,34 @@ function addResult(query, ranked, weak, doc){
   function refresh(){
     if(sc.special==='speed') autoSpeed();
     syncRcr();
-    const it=ITEMS[st.refId]; const sv=sanctionView(it);
+    const it=ITEMS[st.refId]; const sv=sanctionView(it); const docs=sv.docs[st.doc];
+    /* verdictul: încadrarea, suma, ce trebuie verificat */
     artBox.innerHTML='';
-    artBox.append(...[
-      h('div',{class:'artline'},h('b',{text:refLabel(it)}),' Codul contravențional'),
-      h('div',{class:'arttitle',text:it.title}),
-      h('details',{},h('summary',{text:'Dispoziția (text oficial)'}),h('p',{class:'legal',text:it.disp})),
-      h('div',{class:'sanc'},h('div',{class:'lbl',text:'Sancțiune (text oficial)'}),h('p',{class:'legal',text:it.sanc})),
-      h('div',{class:'chips'}, sv.fiz?h('span',{class:'chip money',text:'Amendă în Cod: '+sv.fiz}):null, sv.pct?h('span',{class:'chip pts',text:sv.pct}):null),
-      sv.docs[st.doc].length?h('div',{class:'chips docchips'}, sv.docs[st.doc].map((t,i)=>h('span',{class:'chip doc'+(i?' sub':''),text:t}))):null,
-      (st.doc==='DCA'&&sv.docs.DCA.length)?h('div',{class:'hint',text:'DCA: ½ din amenda minimă; plata în 3 zile lucrătoare: ½ din suma aplicată (art. 34 alin. (3) CC). Sancțiunea sub minim: art. 44¹ CC o permite doar în circumstanțe excepționale, nu și la repetarea faptei în același an.'}):null
-    ].filter(Boolean));
-    const notes=(sc.special==='speed'&&st.speedNote?[st.speedNote]:[]).concat(st.signNote?[st.signNote]:[]).concat(sc.notes||[]).concat(sv.notes);
-    noteBox.innerHTML=''; notes.forEach(n=>noteBox.append(h('div',{class:'note',text:n})));
-    noteBox.style.display=notes.length?'block':'none';
+    artBox.append(h('div',{class:'artline'},h('b',{text:refLabel(it)}),' ',h('span',{class:'vcc',text:'Codul contravențional'})),h('div',{class:'arttitle',text:it.title}));
+    if(sc.refs.length>1) artBox.append(h('div',{class:'vsub'},trunc(refBody(it),120)+' ',h('button',{class:'linkbtn',type:'button',text:'alt alineat',onclick:()=>openDet(refsBox)})));
+    const chips=h('div',{class:'chips docchips'});
+    docs.forEach((t,i)=>chips.append(h('span',{class:'chip doc'+(i?' sub':''),text:t})));
+    if(sv.pct) chips.append(h('span',{class:'chip pts',text:sv.pct}));
+    if(it.avert) chips.append(h('span',{class:'chip wchip',text:'⚠ avertisment posibil'}));
+    if(CM_TXT[it.cm]) chips.append(h('button',{type:'button',class:'chip cmchip'+(it.cm==='X'?' bad':''),text:'⚠ '+CM_TXT[it.cm],onclick:()=>openDet(obsBox)}));
+    if(chips.children.length) artBox.append(chips);
+    if(!docs.length && it.sanc) artBox.append(h('div',{class:'vsub',text:'Suma nu se calculează automat. Sancțiunea: '+trunc(it.sanc,170)}));
+    if(sc.rcr){ const o=st.vals._rcr;
+      artBox.append(h('div',{class:'vrcr'},h('b',{text:'RCR: '}),o?(o.sign?'indicator '+o.sign+' „'+rcrSignName(o.sign)+'”, ':'')+rcrPtLabel(o):'fără indicare',' ',h('button',{class:'linkbtn',type:'button',text:'schimbă',onclick:()=>openDet(rcrBox)}))); }
+    /* observații: cele urgente la vedere, restul sub Detalii */
+    const vis=(sc.special==='speed'&&st.speedNote?[st.speedNote]:[]).concat(st.signNote?[st.signNote]:[]);
+    const rest=(sc.notes||[]).concat(sv.notes);
+    const cnt=rest.filter(n=>!(it.cm==='P'&&n===it.comp)).length;
+    noteBox.innerHTML=''; vis.forEach(n=>noteBox.append(h('div',{class:'note',text:n})));
+    if(cnt) noteBox.append(h('button',{class:'linkbtn obs',type:'button',text:'⚠ '+cnt+(cnt===1?' observație':' observații')+' în Detalii',onclick:()=>openDet(obsBox)}));
+    noteBox.style.display=(vis.length||cnt)?'block':'none';
+    obsBox.innerHTML=''; rest.forEach(n=>obsBox.append(h('div',{class:'note',text:n}))); obsBox.hidden=!rest.length;
+    /* Detalii: textul oficial */
+    detBox.innerHTML='';
+    detBox.append(h('div',{class:'lbl',text:'Dispoziția (text oficial)'}),h('p',{class:'legal',text:it.disp}),
+      h('div',{class:'lbl',text:'Sancțiune (text oficial)'}),h('p',{class:'legal',text:it.sanc||'Alineat fără sancțiune proprie.'}),
+      sv.fiz?h('div',{class:'chips'},h('span',{class:'chip money',text:'Amendă în Cod: '+sv.fiz})):null,
+      (st.doc==='DCA'&&sv.docs.DCA.length)?h('div',{class:'hint',text:'DCA: ½ din amenda minimă; plata în 3 zile lucrătoare: ½ din suma aplicată (art. 34 alin. (3) CC). Sancțiunea sub minim: art. 44¹ CC o permite doar în circumstanțe excepționale, nu și la repetarea faptei în același an.'}):null);
     renderTerm();
     if(sc.refs.length>1) card.querySelectorAll('input[name=ref'+uid+']').forEach(r=>r.checked=(r.value===st.refId));
     if(!st.dirty){ ta.value=buildFabula(sc, st.refId, st.vals); regenBtn.style.display='none'; }
@@ -666,34 +715,39 @@ function addResult(query, ranked, weak, doc){
     inp.addEventListener('input',()=>{ st.vals[id]=inp.value; refresh(); });
     return h('label',{class:'f'+(opts.wide?' wide':'')},h('span',{text:label}),inp);
   }
+  function altsRow(){
+    return h('div',{class:'alts'},h('span',{class:'altlbl',text:unsure?'Posibile variante:':'Alte variante:'}),
+      ranked.slice(0,5).map((r,i)=>i===st.idx?null:h('button',{class:'chipbtn',type:'button',text:r.s.label,onclick:()=>pickScenario(i)})));
+  }
+  function recText(){
+    const hh=ranked[st.idx].hits; if(!hh||!hh.length) return '';
+    return 'Recunoscut după: '+hh.filter((x,i,a)=>!a.some((y,j)=>j!==i&&y.length>x.length&&(' '+y+' ').indexOf(' '+x+' ')>-1)).slice(0,3).join(', ')+'. Dacă nu e ceea ce voiai, alege altă variantă sau descrie altfel.';
+  }
   function render(){
     card.innerHTML='';
-    if(ranked.length>1){
-      card.append(h('div',{class:'alts'},h('span',{class:'altlbl',text:weak?'Posibile variante:':'Alte variante:'}),
-        ranked.slice(0,5).map((r,i)=>i===st.idx?null:h('button',{class:'chipbtn',type:'button',text:r.s.label,onclick:()=>pickScenario(i)}))));
-    }
-    card.append(h('div',{class:'grp '+(sc.group==='Circulație rutieră'?'g-trf':(sc.group==='Fumat și tutun'?'g-fum':'g-pub')),text:sc.group}), h('h3',{text:sc.label}));
-    const sw=h('div',{class:'docsw'},h('span',{class:'altlbl',text:'Întocmesc:'}));
-    [['MAI','MAI · proces-verbal'],['DCA','DCA · decizie asupra cauzei']].forEach(([k,lab])=>{
-      sw.append(h('button',{type:'button',class:'chipbtn'+(st.doc===k?' on':''),text:lab,onclick:()=>{ st.doc=k; sw.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===st.doc)); refresh(); }}));
-      sw.lastChild.dataset.k=k; });
-    card.append(sw);
-    if(ranked[st.idx].hits && ranked[st.idx].hits.length) card.append(h('div',{class:'hint',text:'Recunoscut după: '+ranked[st.idx].hits.filter((x,i,a)=>!a.some((y,j)=>j!==i&&y.length>x.length&&(' '+y+' ').indexOf(' '+x+' ')>-1)).slice(0,3).join(', ')+'. Dacă nu e ceea ce voiai, alege altă variantă sau descrie altfel.'}));
+    if(ranked.length>1 && unsure) card.append(altsRow());
+    /* antet: grupa + comutator MAI / DCA */
+    const sw=h('div',{class:'docsw',role:'group','aria-label':'Documentul întocmit'});
+    [['MAI','MAI · proces-verbal cu privire la contravenție'],['DCA','DCA · decizia asupra cauzei contravenționale']].forEach(([k,tt])=>{
+      const b=h('button',{type:'button',class:'chipbtn'+(st.doc===k?' on':''),text:k,title:tt,onclick:()=>{ st.doc=k; lastDoc=k; sw.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.k===st.doc)); refresh(); }});
+      b.dataset.k=k; sw.append(b); });
+    card.append(h('div',{class:'chead'},h('div',{class:'grp '+(sc.group==='Circulație rutieră'?'g-trf':(sc.group==='Fumat și tutun'?'g-fum':'g-pub')),text:sc.group}),sw), h('h3',{text:sc.label}));
+    artBox=h('div',{class:'art verdict'}); noteBox=h('div',{class:'notes'});
+    card.append(artBox,noteBox);
+    if(unsure && recText()) card.append(h('div',{class:'hint',text:recText()}));
+    /* alineatele (în Detalii) */
+    refCut=0; refsBox=null;
     if(sc.refs.length>1){
-      const box=h('div',{class:'refs'}, h('div',{class:'lbl',text: sc.special==='speed'?'Alineat (se alege după depășire; poți schimba manual)':'Alege alineatul potrivit'}));
       const ds=sc.refs.map(r=>ITEMS[r].disp); let cp=ds[0]; ds.forEach(d=>{ let k=0; while(k<cp.length&&k<d.length&&cp[k]===d[k]) k++; cp=cp.slice(0,k); });
-      cp=cp.replace(/\S*$/,''); const cut=cp.length>=25?cp.length:0;
+      cp=cp.replace(/\S*$/,''); refCut=cp.length>=25?cp.length:0;
+      refsBox=h('div',{class:'refs'}, h('div',{class:'lbl',text: sc.special==='speed'?'Alineat (se alege după depășire; poți schimba manual)':'Alege alineatul potrivit'}));
       sc.refs.forEach(r=>{ const it=ITEMS[r];
         const rd=h('input',{type:'radio',name:'ref'+uid,value:r}); rd.addEventListener('change',()=>{ st.refId=r; st.manualRef=true; refresh(); });
-        let body=cut? '… '+it.disp.slice(cut).trim() : it.disp;
-        const short=body.length>150? body.slice(0,150).replace(/\s\S*$/,'')+'…' : body;
-        box.append(h('label',{class:'refopt'},rd,h('span',{},h('b',{text:refLabel(it)+' '}),short)));
+        refsBox.append(h('label',{class:'refopt'},rd,h('span',{},h('b',{text:refLabel(it)+' '}),trunc(refBody(it),150))));
       });
-      card.append(box);
     }
-    artBox=h('div',{class:'art'}); noteBox=h('div',{class:'notes'});
+    obsBox=h('div',{class:'obs'}); detBox=h('div',{class:'dbox'});
     termBox=h('details',{class:'term'});
-    card.append(artBox,noteBox,termBox);
     rcrBox=null; rcrSel=null; rcrPicBox=null; rcrPtBox=null;
     if(sc.rcr){
       rcrSel=h('select',{class:'rcrsel'});
@@ -738,45 +792,49 @@ function addResult(query, ranked, weak, doc){
       const bPick=h('button',{class:'chipbtn',type:'button',text:'🔍 Alege după imagine',onclick:()=>{ pickBox.hidden=!pickBox.hidden; if(!pickBox.hidden) buildPicker(); }});
       rcrBox=h('div',{class:'rcr'},h('div',{class:'lbl',text:'Regulamentul circulației rutiere (RCR) – ales automat, poți schimba'}),rcrSel,h('div',{class:'rcrbtns'},bPhoto,bPick,fi),photoBox,pickBox,rcrPicBox,rcrPtBox);
       if(st.photoURL) showPhoto();
-      card.append(rcrBox);
     }
-    const det=h('details',{class:'form',open:true},h('summary',{text:'Date pentru fabulă'}));
-    const g=h('div',{class:'grid'});
-    g.append(field('data','Data','','date'),field('ora','Ora','','time'),field('loc','Localitatea','mun. Bălți'),field('locul','Locul exact','adresa / reperul',null,{wide:true}),
-             field('nume','Nume, prenume','persoana în privința căreia se întocmește',null,{wide:true}),field('idnp','IDNP (opțional)','',null,{mode:'numeric'}));
+    /* câmpuri: esențialele la vedere, restul sub „Mai multe date” */
+    const actStr=typeof sc.act==='string'?sc.act:Object.values(sc.act).join(' ');
+    const isEss=f=>!f.d && actStr.indexOf('{'+f.id+'}')>=0;
+    const g=h('div',{class:'grid'}), g2=h('div',{class:'grid'});
+    g.append(field('data','Data','','date'),field('ora','Ora','','time'),field('locul','Locul exact','adresa / reperul',null,{wide:true}),
+             field('nume','Nume, prenume','persoana în privința căreia se întocmește',null,{wide:true}));
     if(sc.veh) g.append(field('veh','Vehiculul','marca, modelul'),field('nr','Nr. de înmatriculare','ex.: ABC 123'));
-    sc.fields.forEach(f=>g.append(field(f.id,f.label,f.ph,null,{wide:f.label.length>26, mode:(f.id==='viteza'||f.id==='limita')?'decimal':false})));
+    const fopt=f=>field(f.id,f.label,f.ph,null,{wide:f.label.length>26, mode:(f.id==='viteza'||f.id==='limita')?'decimal':false});
+    sc.fields.filter(isEss).forEach(f=>g.append(fopt(f)));
     if(sc.special==='speed'){
       const cb=h('input',{type:'checkbox'}); cb.checked=!!st.vals.repetat; cb.addEventListener('change',()=>{ st.vals.repetat=cb.checked; refresh(); });
       g.append(h('label',{class:'f wide chk'},cb,h('span',{text:'Depășire repetată în cursul aceluiași an (alin. 6–7)'})));
     }
-    if(sc.veh||sc.rcr) g.append(field('rcr','Alt punct RCR (opțional, înlocuiește propunerea)','ex.: 63',null,{wide:true}));
-    g.append(field('probe','Probe (opțional)','ex.: martori, înregistrare video, aparat radar',null,{wide:true}));
-    g.append(field('detalii','Circumstanțe suplimentare (opțional)','ex.: a fost avertizat verbal, a refuzat să semneze',null,{area:true,wide:true}));
-    det.append(g); card.append(det);
-    ta=h('textarea',{class:'fabula',rows:10}); ta.addEventListener('input',()=>{ st.dirty=true; regenBtn.style.display='inline-block'; });
+    g2.append(field('loc','Localitatea','mun. Bălți'),field('idnp','IDNP (opțional)','',null,{mode:'numeric'}));
+    sc.fields.filter(f=>!isEss(f)).forEach(f=>g2.append(fopt(f)));
+    if(sc.veh||sc.rcr) g2.append(field('rcr','Alt punct RCR (opțional, înlocuiește propunerea)','ex.: 63',null,{wide:true}));
+    g2.append(field('probe','Probe (opțional)','ex.: martori, înregistrare video, aparat radar',null,{wide:true}));
+    g2.append(field('detalii','Circumstanțe suplimentare (opțional)','ex.: a fost avertizat verbal, a refuzat să semneze',null,{area:true,wide:true}));
+    card.append(g, h('details',{class:'more'},h('summary',{text:'+ Mai multe date'}),g2));
+    /* fabula */
+    ta=h('textarea',{class:'fabula',rows:9}); ta.addEventListener('input',()=>{ st.dirty=true; regenBtn.style.display='inline-block'; });
     regenBtn=h('button',{class:'btn ghost',type:'button',text:'Regenerează din câmpuri',onclick:()=>{ st.dirty=false; refresh(); }});
     const b1=h('button',{class:'btn',type:'button',text:'Copiază fabula'}); b1.addEventListener('click',()=>copyText(ta.value,b1));
     const b2=h('button',{class:'btn ghost',type:'button',text:'Copiază tot'});
     b2.addEventListener('click',()=>{ const it=ITEMS[st.refId], sv=sanctionView(it);
       copyText('Document: '+(st.doc==='DCA'?'DCA (decizia asupra cauzei contravenționale)':'MAI (proces-verbal cu privire la contravenție)')+'\nÎncadrare: '+refLabel(it)+' Cod contravențional – '+it.title+'\nSancțiune (text oficial): '+it.sanc+(sv.fiz?'\nAmendă în Cod: '+sv.fiz:'')+(sv.docs[st.doc].length?'\n'+sv.docs[st.doc].join('. '):'')+(sv.pct?'\n'+sv.pct:'')+(st.vals._rcr?'\nRCR: '+(st.vals._rcr.sign?'indicatorul '+st.vals._rcr.sign+' „'+rcrSignName(st.vals._rcr.sign)+'”, ':'')+rcrPtLabel(st.vals._rcr):'')+termTxt()+'\n\nFabula:\n'+ta.value, b2); });
     card.append(h('div',{class:'lbl',text:'Fabula pentru procesul-verbal'}),ta,h('div',{class:'btns'},b1,b2,regenBtn),
-      h('div',{class:'hint',text:'Completează câmpurile marcate cu [ ]. Verifică textul oficial înainte de a semna.'}),
-      reportBox(query, sc.label+' ('+refLabel(ITEMS[sc.refs[0]])+')'));
+      h('div',{class:'hint',text:'Completează ce e între [ ]. Verifică textul oficial înainte de a semna.'}));
+    /* Detalii: tot restul */
+    detEl=h('details',{class:'dtl'},h('summary',{text:'Detalii: text oficial, termene'+(sc.rcr?', RCR':'')+(ranked.length>1&&!unsure?', alte variante':'')}));
+    detEl.append(obsBox);
+    if(refsBox) detEl.append(refsBox);
+    detEl.append(detBox,termBox);
+    if(rcrBox) detEl.append(rcrBox);
+    if(ranked.length>1 && !unsure){ detEl.append(h('div',{class:'dsec'},altsRow())); if(recText()) detEl.append(h('div',{class:'hint',text:recText()})); }
+    card.append(detEl, reportBox(query, sc.label+' ('+refLabel(ITEMS[sc.refs[0]])+')'));
     refresh();
   }
   pickScenario(0);
 }
 
 /* ---------- trimitere mesaj ---------- */
-function askDoc(cb){
-  const box=h('div',{class:'card'},h('p',{},h('b',{text:'Ce întocmești?'})));
-  const pick=(k,lab)=>{ box.innerHTML=''; box.append(h('div',{class:'hint',text:'Întocmesc: '+lab})); cb(k); };
-  box.append(
-    h('button',{class:'chipbtn block',type:'button',onclick:()=>pick('MAI','MAI – proces-verbal cu privire la contravenție')},h('b',{text:'MAI'}),' · proces-verbal cu privire la contravenție'),
-    h('button',{class:'chipbtn block',type:'button',onclick:()=>pick('DCA','DCA – decizia asupra cauzei contravenționale')},h('b',{text:'DCA'}),' · decizia asupra cauzei contravenționale'));
-  addBot(box);
-}
 function send(text){
   text=(text||'').trim(); if(!text) return;
   addUser(text);
@@ -786,15 +844,13 @@ function send(text){
     addBot(h('div',{class:'card'},h('p',{text:'Nu am găsit un articol potrivit. Încearcă alte cuvinte sau caută în fila „Articole”, unde ai toate articolele din partea specială a Codului (art. 47–373).'}),reportBox(text,null,'⚑ Raportează această căutare')));
     return;
   }
-  askDoc(doc=>{
-    if(ranked.length && ranked[0].sc>=2){ addResult(text, ranked, false, doc); return; }
-    const box=h('div',{class:'card'},h('p',{text:'Nu sunt sigur ce articol se potrivește. Alege varianta corectă sau descrie fapta altfel:'}));
-    ranked.slice(0,4).forEach((r,i)=>box.append(h('button',{class:'chipbtn block',type:'button',text:r.s.label,
-      onclick:()=>addResult(text,[r].concat(ranked.filter((x,j)=>j!==i)),false,doc)})));
-    hits.forEach(x=>box.append(h('button',{class:'chipbtn block',type:'button',text:refLabel(x.i)+' – '+x.i.disp.slice(0,80)+'…',
-      onclick:()=>addResult(text,[{s:genericScenario(x.i),sc:5}],false,doc)})));
-    box.append(h('p',{class:'hint',text:'Poți căuta și în fila „Articole”.'}),reportBox(text,ranked[0]?ranked[0].s.label:null,'⚑ Nu e ce căutam')); addBot(box);
-  });
+  if(ranked.length && ranked[0].sc>=2){ addResult(text, ranked, false); return; }
+  const box=h('div',{class:'card'},h('p',{text:'Nu sunt sigur ce articol se potrivește. Alege varianta corectă sau descrie fapta altfel:'}));
+  ranked.slice(0,4).forEach((r,i)=>box.append(h('button',{class:'chipbtn block',type:'button',text:r.s.label,
+    onclick:()=>addResult(text,[r].concat(ranked.filter((x,j)=>j!==i)),false)})));
+  hits.forEach(x=>box.append(h('button',{class:'chipbtn block',type:'button',text:refLabel(x.i)+' – '+x.i.disp.slice(0,80)+'…',
+    onclick:()=>addResult(text,[{s:genericScenario(x.i),sc:5}],false)})));
+  box.append(h('p',{class:'hint',text:'Poți căuta și în fila „Articole”.'}),reportBox(text,ranked[0]?ranked[0].s.label:null,'⚑ Nu e ce căutam')); addBot(box);
 }
 $('#composer').addEventListener('submit',e=>{ e.preventDefault(); const i=$('#q'); const v=i.value; i.value=''; i.style.height='auto'; send(v); });
 $('#q').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); $('#composer').requestSubmit(); } });
@@ -862,7 +918,7 @@ function renderList(){
         h('p',{class:'legal',text:it.disp}),
         it.comp?h('div',{class:'note',text:it.comp}):null,
         it.sanc?h('div',{class:'lbl',text:'Sancțiune (text oficial)'}):null, it.sanc?h('p',{class:'legal',text:it.sanc}):h('div',{class:'hint',text:'Alineat fără sancțiune proprie (excepție, condiție sau definiție).'}),
-        it.sanc?h('button',{class:'btn',type:'button',text:'Folosește în chat',onclick:()=>{ showTab('chat'); addUser(refLabel(it)); askDoc(doc=>addResult(refLabel(it),[{s:genericScenario(it),sc:5}],false,doc)); }}):null);
+        it.sanc?h('button',{class:'btn',type:'button',text:'Folosește în chat',onclick:()=>{ showTab('chat'); addUser(refLabel(it)); addResult(refLabel(it),[{s:genericScenario(it),sc:5}],false); }}):null);
     });
     list.append(d);
   });
@@ -902,7 +958,7 @@ function pickSign(c){
   const q='Indicator '+c+' „'+RCR.signs[c].n+'”';
   showTab('chat'); addUser(q);
   if(t.info){ addSignInfo(c,t.info); return; }
-  askDoc(doc=>addResult(q,t.ranked,false,doc));
+  addResult(q,t.ranked,false);
 }
 function renderSigns(){
   sgBuilt=true;
@@ -938,7 +994,7 @@ function renderPermis(){
     if(p.c===49) plist.append(h('div',{class:'phint'},
       h('div',{text:'Dacă persoana conducea un vehicul, caută încadrarea la art. 231 alin. (6): conducerea de o persoană al cărei drept de a conduce este anulat, care este privată de dreptul de a conduce sau căreia îi este suspendat dreptul.'}),
       h('button',{class:'btn sm',type:'button',text:'Încadrează în chat',onclick:()=>{ const sc=SCEN_BY_ID['fara_permis'], q2='Permis cu status 49: nevalabil, privare/anularea dreptului de a conduce';
-        showTab('chat'); addUser(q2); askDoc(doc=>addResult(q2,[{s:sc,sc:9,preset:{refId:'231:6',rcrKey:undefined}}],false,doc)); }})));
+        showTab('chat'); addUser(q2); addResult(q2,[{s:sc,sc:9,preset:{refId:'231:6',rcrKey:undefined}}],false); }})));
   });
   if(!items.length){
     plist.append(h('div',{class:'hint',text:'Cod negăsit în listă. Verifică în baza de date; dacă el lipsește din aplicație, raportează-l mai jos.'}));
