@@ -269,6 +269,17 @@ textarea.agf{resize:vertical;min-height:130px;line-height:1.4}
 .agbtns{display:flex;flex-direction:column;gap:8px;margin-top:16px}
 .agbtns .btn{width:100%}
 .agdel{color:var(--bad)!important}
+
+.agrow{display:flex;align-items:flex-start;gap:10px}
+.agmain{flex:1;min-width:0}
+.agitem .aga{font-weight:500;opacity:.7;font-size:14px}
+.agtrash{flex:none;font:inherit;font-size:13px;font-weight:700;color:var(--bad);background:transparent;border:1px solid var(--bad);border-radius:10px;padding:7px 11px;cursor:pointer}
+.agtrash:active{background:var(--surface2)}
+.agconf{padding:2px 0}
+.agq2{font-weight:700;margin-bottom:10px;line-height:1.35}
+.agbtns2{display:flex;gap:8px}
+.agbtns2 .btn{flex:1}
+.agyes{background:var(--bad)!important;border-color:var(--bad)!important;color:#fff!important}
 </style></head>
 <body>
 <header>
@@ -1221,7 +1232,7 @@ function agSave(a){ try{ localStorage.setItem(AG_KEY,JSON.stringify(a)); return 
 const agDate=ts=>{ const d=new Date(ts), p=n=>String(n).padStart(2,'0'); return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes()); };
 const agName=x=>((x.n||'')+' '+(x.p||'')).trim();
 let agEl=null, agSort='recent', agEditId=null, agDelT=null;
-let agSearch, agCount, agList, agSortBtn, agCopyBtn, agListView, agEditView, agEditTitle, fNume, fPren, fTel, fNote, agDelBtn;
+let agSearch, agCount, agList, agSortBtn, agCopyBtn, agListView, agEditView, agEditTitle, fNume, fPren, fAn, fTel, fNote, agDelBtn;
 function buildAgenda(){
   agEl=h('div',{class:'agenda',role:'dialog','aria-modal':'true','aria-label':'Agendă'}); agEl.hidden=true;
   const head=h('div',{class:'aghead'},h('div',{class:'agtitle',text:'Agendă'}),h('button',{class:'agx',type:'button','aria-label':'Închide',text:'✕',onclick:closeAgenda}));
@@ -1236,6 +1247,7 @@ function buildAgenda(){
     h('div',{class:'hint',text:'Notițele se păstrează doar pe acest telefon și nu se trimit nicăieri. Dacă ștergi datele aplicației sau o dezinstalezi, se pierd. Ca să le salvezi în altă parte, folosește „Copiază tot”.'}));
   fNume=h('input',{type:'text',class:'agf',id:'agn',placeholder:'ex.: Popescu',autocomplete:'off',autocapitalize:'words',maxlength:'60'});
   fPren=h('input',{type:'text',class:'agf',id:'agp',placeholder:'ex.: Ion',autocomplete:'off',autocapitalize:'words',maxlength:'60'});
+  fAn=h('input',{type:'text',inputmode:'numeric',pattern:'[0-9]*',class:'agf',id:'aga',placeholder:'ex.: 1985',autocomplete:'off',maxlength:'4'});
   fTel=h('input',{type:'tel',class:'agf',id:'agt',placeholder:'ex.: 0 69 123 456',autocomplete:'off',maxlength:'30'});
   fNote=h('textarea',{class:'agf',id:'agw',rows:'7',placeholder:'Despre ce ați vorbit, ce s-a stabilit, ce urmează…',maxlength:'4000'});
   agEditTitle=h('div',{class:'agsub'});
@@ -1244,6 +1256,7 @@ function buildAgenda(){
     agEditTitle,
     h('label',{for:'agn',text:'Nume (familia)'}),fNume,
     h('label',{for:'agp',text:'Prenume'}),fPren,
+    h('label',{for:'aga',text:'Anul nașterii (opțional)'}),fAn,
     h('label',{for:'agt',text:'Telefon (opțional)'}),fTel,
     h('label',{for:'agw',text:'Notiță'}),fNote,
     h('div',{class:'agbtns'},h('button',{class:'btn',type:'submit',text:'Salvează'}),h('button',{class:'btn ghost',type:'button',text:'Înapoi',onclick:agShowList}),agDelBtn));
@@ -1256,7 +1269,7 @@ function closeAgenda(){ if(agEl) agEl.hidden=true; document.body.classList.remov
 function agShowList(){ agEditView.hidden=true; agListView.hidden=false; agEditId=null; agRenderList(); agListView.scrollTop=0; }
 function agRenderList(){
   const all=agLoad(), q=norm(agSearch.value).trim(), qs=q.split(/\s+/).filter(Boolean);
-  let a=all.filter(x=>{ const s=norm(agName(x)+' '+(x.t||'')+' '+(x.w||'')); return qs.every(t=>s.indexOf(t)>-1); });
+  let a=all.filter(x=>{ const s=norm(agName(x)+' '+(x.a||'')+' '+(x.t||'')+' '+(x.w||'')); return qs.every(t=>s.indexOf(t)>-1); });
   a.sort(agSort==='az'?(x,y)=>agName(x).localeCompare(agName(y),'ro'):(x,y)=>(y.up||y.ts)-(x.up||x.ts));
   agSortBtn.textContent=agSort==='az'?'Ordine: A–Z':'Ordine: recente';
   agCount.textContent=all.length?(q?a.length+' din '+all.length:all.length+(all.length===1?' persoană':' persoane')):'';
@@ -1265,30 +1278,47 @@ function agRenderList(){
   if(!all.length){ agList.append(h('div',{class:'agempty'},h('b',{text:'Agenda e goală.'}),h('div',{text:'Apasă „+ Persoană nouă” și scrie numele, prenumele și o notiță despre convorbire.'}))); return; }
   if(!a.length){ agList.append(h('div',{class:'agempty',text:'Nicio persoană găsită.'})); return; }
   a.forEach(x=>{
-    const c=h('div',{class:'agitem',role:'button',tabindex:'0'},
-      h('div',{class:'agn',text:agName(x)||'(fără nume)'}),
-      x.t?h('a',{class:'agtel',href:'tel:'+x.t.replace(/[^\d+]/g,''),text:x.t,onclick:e=>e.stopPropagation()}):null,
-      x.w?h('div',{class:'agnote',text:x.w}):null,
-      h('div',{class:'agdate',text:agDate(x.up||x.ts)}));
-    c.addEventListener('click',()=>agEdit(x.id));
-    c.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); agEdit(x.id); } });
+    const c=h('div',{class:'agitem',role:'button',tabindex:'0'});
+    const fill=()=>{
+      c.innerHTML='';
+      c.append(
+        h('div',{class:'agrow'},
+          h('div',{class:'agmain'},
+            h('div',{class:'agn'},agName(x)||'(fără nume)',x.a?h('span',{class:'aga',text:' · n. '+x.a}):null),
+            x.t?h('a',{class:'agtel',href:'tel:'+x.t.replace(/[^\d+]/g,''),text:x.t,onclick:e=>e.stopPropagation()}):null),
+          h('button',{class:'agtrash',type:'button','aria-label':'Șterge '+agName(x),text:'Șterge',onclick:e=>{ e.stopPropagation(); ask(); }})),
+        x.w?h('div',{class:'agnote',text:x.w}):null,
+        h('div',{class:'agdate',text:agDate(x.up||x.ts)}));
+    };
+    const ask=()=>{
+      c.innerHTML='';
+      c.append(h('div',{class:'agconf'},
+        h('div',{class:'agq2',text:'Ștergi pe '+(agName(x)||'această persoană')+'?'}),
+        h('div',{class:'agbtns2'},
+          h('button',{class:'btn agyes',type:'button',text:'Da, șterge',onclick:e=>{ e.stopPropagation(); if(agSave(agLoad().filter(z=>z.id!==x.id))){ showToast('Șters',1200); agRenderList(); } }}),
+          h('button',{class:'btn ghost',type:'button',text:'Nu',onclick:e=>{ e.stopPropagation(); fill(); }}))));
+    };
+    fill();
+    c.addEventListener('click',e=>{ if(c.querySelector('.agconf')) return; agEdit(x.id); });
+    c.addEventListener('keydown',e=>{ if(e.target===c&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); agEdit(x.id); } });
     agList.append(c);
   });
 }
 function agEdit(id){
   agEditId=id; const x=id?agLoad().find(z=>z.id===id):null;
-  fNume.value=x?x.n||'':''; fPren.value=x?x.p||'':''; fTel.value=x?x.t||'':''; fNote.value=x?x.w||'':'';
+  fNume.value=x?x.n||'':''; fPren.value=x?x.p||'':''; fAn.value=x?x.a||'':''; fTel.value=x?x.t||'':''; fNote.value=x?x.w||'':'';
   agEditTitle.textContent=x?'Modifică · adăugat '+agDate(x.ts):'Persoană nouă';
   agDelBtn.hidden=!x; agDelBtn.textContent='Șterge persoana'; clearTimeout(agDelT);
   agListView.hidden=true; agEditView.hidden=false; agEditView.scrollTop=0;
   if(!x) setTimeout(()=>{ try{ fNume.focus(); }catch(e){} },60);
 }
 function agSaveForm(){
-  const n=fNume.value.trim(), p=fPren.value.trim(), t=fTel.value.trim(), w=fNote.value.trim();
+  const n=fNume.value.trim(), p=fPren.value.trim(), an=fAn.value.replace(/\D/g,''), t=fTel.value.trim(), w=fNote.value.trim();
   if(!n&&!p){ showToast('Scrie cel puțin numele sau prenumele',2200); fNume.focus(); return; }
+  if(an&&(an.length!==4||+an<1900||+an>new Date().getFullYear())){ showToast('Anul nașterii: 4 cifre, ex. 1985',2400); fAn.focus(); return; }
   const a=agLoad(), now=Date.now();
-  if(agEditId){ const x=a.find(z=>z.id===agEditId); if(x){ x.n=n; x.p=p; x.t=t; x.w=w; x.up=now; } }
-  else a.push({id:now.toString(36)+Math.random().toString(36).slice(2,6),n:n,p:p,t:t,w:w,ts:now,up:now});
+  if(agEditId){ const x=a.find(z=>z.id===agEditId); if(x){ x.n=n; x.p=p; x.a=an; x.t=t; x.w=w; x.up=now; } }
+  else a.push({id:now.toString(36)+Math.random().toString(36).slice(2,6),n:n,p:p,a:an,t:t,w:w,ts:now,up:now});
   if(agSave(a)){ showToast('Salvat',1200); agShowList(); }
 }
 function agDelete(){
@@ -1298,7 +1328,7 @@ function agDelete(){
   if(agSave(agLoad().filter(z=>z.id!==agEditId))){ showToast('Șters',1200); agShowList(); }
 }
 function agCopyAll(){
-  const t=agLoad().sort((x,y)=>agName(x).localeCompare(agName(y),'ro')).map(x=>agName(x)+(x.t?' · '+x.t:'')+' · '+agDate(x.up||x.ts)+(x.w?'\n'+x.w:'')).join('\n\n');
+  const t=agLoad().sort((x,y)=>agName(x).localeCompare(agName(y),'ro')).map(x=>agName(x)+(x.a?' · n. '+x.a:'')+(x.t?' · '+x.t:'')+' · '+agDate(x.up||x.ts)+(x.w?'\n'+x.w:'')).join('\n\n');
   copyText(t,agCopyBtn);
 }
 $('#agbtn').addEventListener('click',openAgenda);
