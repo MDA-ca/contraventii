@@ -1,9 +1,10 @@
 /* Server intermediar pentru Asistent contravenții.
    1) /api/hit – numărătoare anonimă: primește cel mult o dată pe zi un cod aleatoriu al telefonului și tipul (apk / pwa / web).
       NU salvează IP-ul, textul căutat, numele sau altceva.
-   2) /api/ai – butonul „Întreabă AI”: trimite descrierea (anonimizată în aplicație) la Anthropic și întoarce o sugestie.
-      Cheia API stă doar aici (secret ANTHROPIC_API_KEY în Cloudflare). Textul NU se salvează și NU se scrie în jurnal;
-      se păstrează doar un contor pe zi (cod aleatoriu al telefonului + număr de întrebări) pentru limită.
+   2) /api/ai – butonul „Întreabă AI”: trimite descrierea (anonimizată în aplicație) la un model AI și întoarce o sugestie.
+      Implicit rulează pe Cloudflare Workers AI (binding „AI”, fără cheie). Opțional: Anthropic (secret ANTHROPIC_API_KEY).
+      Textul NU se salvează și NU se scrie în jurnal; se păstrează doar un contor pe zi (cod aleatoriu al telefonului +
+      număr de întrebări) pentru limită.
    Restul cererilor merg la fișierele site-ului. */
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -54,8 +55,8 @@ function shape(o) {
 
 let _tbl = false;
 /* limită pe zi: pe telefon și în total (ca să nu se consume banii din cheie). Fără bază de date nu se poate limita. */
-async function aiLimit(env, id) {
-  const perDev = parseInt(env.AI_MAX_PER_DAY || '30', 10), total = parseInt(env.AI_MAX_GLOBAL || '600', 10);
+async function aiLimit(env, id, prov) {
+  const perDev = parseInt(env.AI_MAX_PER_DAY || '30', 10), total = parseInt(env.AI_MAX_GLOBAL || (prov === 'cf' ? '250' : '600'), 10);
   if (!env.DB) return true;
   if (!_tbl) {
     await env.DB.prepare('CREATE TABLE IF NOT EXISTS ai_usage (day TEXT NOT NULL, id TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, id))').run();
@@ -70,10 +71,59 @@ async function aiLimit(env, id) {
   return true;
 }
 
+/* furnizor: Cloudflare Workers AI (binding „AI”, fără cheie) sau Anthropic (secret ANTHROPIC_API_KEY).
+   Implicit: Cloudflare, dacă binding-ul AI există. Se poate forța cu variabila AI_PROVIDER = cloudflare | anthropic. */
+function pickProvider(env) {
+  const want = String(env.AI_PROVIDER || '').toLowerCase();
+  if (want === 'anthropic') return env.ANTHROPIC_API_KEY ? 'anthropic' : null;
+  if (want === 'cloudflare') return env.AI ? 'cf' : null;
+  return env.AI ? 'cf' : (env.ANTHROPIC_API_KEY ? 'anthropic' : null);
+}
+function cfText(out) {
+  if (out == null) return '';
+  if (typeof out === 'string') return out;
+  const ch = out.choices && out.choices[0];
+  if (ch) {
+    const c = (ch.message || {}).content;
+    if (typeof c === 'string') return c;
+    if (Array.isArray(c)) return c.map(function (x) { return (x && x.text) || ''; }).join('');
+    if (c && typeof c === 'object') return JSON.stringify(c);
+    if (typeof ch.text === 'string') return ch.text;
+  }
+  if (out.response != null) return typeof out.response === 'string' ? out.response : JSON.stringify(out.response);
+  return '';
+}
+const OUT_SCHEMA = {
+  type: 'object',
+  properties: {
+    rez: { type: 'array', items: { type: 'object', properties: { id: { type: ['string', 'null'] }, art: { type: ['string', 'null'] }, al: { type: ['string', 'null'] }, de_ce: { type: 'string' } } } },
+    intrebari: { type: 'array', items: { type: 'string' } },
+    nota: { type: 'string' }
+  },
+  required: ['rez', 'intrebari', 'nota']
+};
+async function runCf(env, user) {
+  const model = env.CF_MODEL || '@cf/google/gemma-4-26b-a4b-it';
+  const base = {
+    messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }],
+    max_tokens: 700, temperature: 0.2,
+    chat_template_kwargs: { enable_thinking: false }
+  };
+  let out;
+  try {
+    out = await env.AI.run(model, Object.assign({}, base, { response_format: { type: 'json_schema', json_schema: OUT_SCHEMA } }));
+  } catch (e) {
+    if (/4006|neuron|allocation|daily/i.test(String(e && e.message))) throw e;
+    out = await env.AI.run(model, base);          /* modelul nu acceptă format JSON forțat: reîncercăm simplu */
+  }
+  return cfText(out);
+}
+
 async function askAi(request, env) {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (request.method !== 'POST') return J({ err: 'metoda' }, 405);
-  if (!env.ANTHROPIC_API_KEY) return J({ err: 'neconfigurat' }, 503);
+  const prov = pickProvider(env);
+  if (!prov) return J({ err: 'neconfigurat' }, 503);
   let b;
   try {
     const txt = await request.text();
@@ -87,9 +137,18 @@ async function askAi(request, env) {
   const cands = (Array.isArray(b.c) ? b.c : []).slice(0, 30)
     .map(function (c) { return { id: clean(c && c.id, 24), t: clean(c && c.t, 420) }; })
     .filter(function (c) { return c.id && c.t; });
-  try { if (!(await aiLimit(env, id))) return J({ err: 'limită' }, 429); } catch (e) { /* dacă baza nu răspunde, nu blocăm */ }
+  try { if (!(await aiLimit(env, id, prov))) return J({ err: 'limită' }, 429); } catch (e) { /* dacă baza nu răspunde, nu blocăm */ }
   const user = 'DESCRIEREA FAPTEI:\n' + q + '\n\nARTICOLE CANDIDATE:\n' +
     (cands.length ? cands.map(function (c) { return '[' + c.id + '] ' + c.t; }).join('\n') : '(niciunul)');
+  if (prov === 'cf') {
+    try {
+      const o = parseModelJson(await runCf(env, user));
+      if (!o) return J({ err: 'răspuns neclar' }, 502);
+      return J(shape(o));
+    } catch (e) {
+      return J({ err: /4006|neuron|allocation|daily/i.test(String(e && e.message)) ? 'plin' : 'serviciu' }, /4006|neuron|allocation|daily/i.test(String(e && e.message)) ? 429 : 502);
+    }
+  }
   const ctl = new AbortController();
   const to = setTimeout(function () { ctl.abort(); }, 25000);
   try {
