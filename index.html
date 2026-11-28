@@ -1391,8 +1391,7 @@ async function aiAsk(q,c){
 }
 function aiErrTxt(e){
   const c=e&&e.code;
-  if(c==='neconfigurat') return 'AI nu e pornit încă pe server (lipsește legătura „AI” din Cloudflare). Răspunsul de mai sus rămâne valabil.';
-  if(c==='plin') return 'Limita gratuită zilnică a serviciului AI s-a terminat. Se reface mâine dimineață. Răspunsul de mai sus rămâne valabil.';
+  if(c==='neconfigurat') return 'AI nu e pornit încă pe server (lipsește cheia). Răspunsul de mai sus rămâne valabil.';
   if(c==='limită') return 'Ai atins limita zilnică de întrebări AI. Încearcă mâine.';
   if(c) return 'Serviciul AI nu răspunde acum. Încearcă mai târziu; răspunsul de mai sus rămâne valabil.';
   return 'Nu m-am putut conecta la AI. Verifică internetul. (AI merge doar în aplicația instalată sau pe asistent-mai.pages.dev.)';
